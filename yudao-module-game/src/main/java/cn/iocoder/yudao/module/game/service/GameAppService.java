@@ -228,9 +228,6 @@ public class GameAppService {
         place(grid, entity("wallMid", "playerWall", "城墙", "wall", "player", "shield", 1, 300, 0), 4, 2);
         place(grid, entity("wallBot", "playerWall", "城墙", "wall", "player", "shield", 1, 300, 0), 4, 3);
         place(grid, entity("enemyBase", "enemyBase", "敌方基地", "base", "enemy", "hammerWorkshop", 1, enemyBaseHp, 0), 8, 2);
-        place(grid, unitEntity(configMap, "swordsman", "enemy"), 5, 1);
-        place(grid, unitEntity(configMap, "swordsman", "enemy"), 6, 2);
-        place(grid, unitEntity(configMap, "spearman", "enemy"), 7, 3);
         place(grid, resourceEntity(configMap, "ironMine"), 1, 11);
         place(grid, resourceEntity(configMap, "goldMine"), 4, 11);
         place(grid, resourceEntity(configMap, "forest"), 7, 11);
@@ -271,6 +268,8 @@ public class GameAppService {
             splitCard(state, str(command.get("cardId")), events);
         } else if ("move-entity".equals(type)) {
             moveEntity(state, command, events);
+        } else if ("set-port".equals(type)) {
+            setPort(state, command, events);
         }
     }
 
@@ -286,7 +285,7 @@ public class GameAppService {
         resources.put("gold", num(resources.get("gold")) - cost);
         List<String> pool = "building".equals(packType)
                 ? List.of("maternityRoom", "nursery", "trainingCamp", "belt", "toolWorkshop", "swordWorkshop", "ironMine", "goldMine", "forest")
-                : List.of("villager", "worker", "swordsman", "archer", "spearman", "mage", "shieldman");
+                : List.of("villager", "baby", "ore", "pickaxe", "sword", "bow", "staff", "shield", "spear", "worker", "swordsman", "archer", "spearman", "mage", "shieldman");
         Map<String, Map<String, Object>> configMap = configMap();
         int base = ((int) num(state.get("tick")) + hand.size() + cost) % pool.size();
         for (int i = 0; i < drawCount; i++) addStack(hand, pool.get((base + i * 2) % pool.size()), 1, configMap);
@@ -309,7 +308,6 @@ public class GameAppService {
         String cardCode = str(stack.get("code"));
         String type = str(def.get("type"));
         int placingCount = (int) num(stack.get("count"));
-        if ("material".equals(type) || "equipment".equals(type)) throw new IllegalArgumentException("材料和装备需要进入生产链，不能直接放置到地图");
         Map<String, Object> targetEntity = (Map<String, Object>) cell.get("entity");
         if (targetEntity != null) {
             if ("resource".equals(str(targetEntity.get("kind"))) && isCollector(cardCode)) {
@@ -325,7 +323,9 @@ public class GameAppService {
             }
         } else {
             if (row == 4 && !"unit".equals(type)) throw new IllegalArgumentException("备战区只能放入单位");
-            cell.put("entity", entity(random(), cardCode, str(def.get("name")), type, "player", str(def.get("asset_key")), placingCount, (int) num(def.get("hp")) * placingCount, (int) num(def.get("attack"))));
+            Map<String, Object> placed = entity(random(), cardCode, str(def.get("name")), type, "player", str(def.get("asset_key")), placingCount, (int) num(def.get("hp")) * placingCount, (int) num(def.get("attack")));
+            initPorts(placed, col, row);
+            cell.put("entity", placed);
         }
         hand.remove(stack);
         events.add(Map.of("text", def.get("name") + " 已放置"));
@@ -391,12 +391,43 @@ public class GameAppService {
     }
 
     @SuppressWarnings("unchecked")
+    private void setPort(Map<String, Object> state, Map<String, Object> command, List<Map<String, Object>> events) {
+        int col = (int) num(command.get("col"));
+        int row = (int) num(command.get("row"));
+        int targetCol = (int) num(command.get("targetCol"));
+        int targetRow = (int) num(command.get("targetRow"));
+        int index = (int) num(command.get("index"));
+        String portKind = str(command.get("portKind"));
+        if (!isOperableCell(col, row) || !isOperableCell(targetCol, targetRow)) throw new IllegalArgumentException("口位只能设置在我方可操作区域");
+        List<List<Map<String, Object>>> grid = (List<List<Map<String, Object>>>) state.get("grid");
+        Map<String, Object> entity = (Map<String, Object>) grid.get(row).get(col).get("entity");
+        if (entity == null || !"building".equals(str(entity.get("kind"))) || !"player".equals(str(entity.get("owner")))) {
+            throw new IllegalArgumentException("请选择己方建筑设置口位");
+        }
+        initPorts(entity, col, row);
+        boolean belt = "belt".equals(str(entity.get("code")));
+        int range = belt ? 3 : 1;
+        if (Math.max(Math.abs(targetCol - col), Math.abs(targetRow - row)) > range || (targetCol == col && targetRow == row)) {
+            throw new IllegalArgumentException(belt ? "传送带口位范围为 3 格" : "建筑口位必须在周围 1 格");
+        }
+        if ("output".equals(portKind) && targetRow >= 1 && targetRow <= 3) throw new IllegalArgumentException("不能直接产出到战斗区");
+        Map<String, Object> ports = (Map<String, Object>) entity.get("ports");
+        List<Map<String, Object>> list = (List<Map<String, Object>>) ports.get("input".equals(portKind) ? "inputs" : "outputs");
+        if (index < 0 || index >= list.size()) throw new IllegalArgumentException("口位编号不存在");
+        Map<String, Object> port = list.get(index);
+        port.put("col", targetCol);
+        port.put("row", targetRow);
+        events.add(Map.of("text", entity.get("label") + ("input".equals(portKind) ? " 投料口" : " 产出口") + (index + 1) + " 已设置"));
+    }
+
+    @SuppressWarnings("unchecked")
     private void tickState(Map<String, Object> state, List<Map<String, Object>> events) {
         int tick = (int) num(state.get("tick")) + 1;
         state.put("tick", tick);
         Map<String, Object> resources = (Map<String, Object>) state.get("resources");
         gatherResources(state, resources, tick, events);
         runBuildings(state, resources, tick, events);
+        runBelts(state, tick, events);
         if (tick % 3 == 0) {
             long enemyHp = Math.max(0, num(state.get("enemyBaseHp")) - 18);
             state.put("enemyBaseHp", enemyHp);
@@ -440,13 +471,14 @@ public class GameAppService {
     @SuppressWarnings("unchecked")
     private void runBuildings(Map<String, Object> state, Map<String, Object> resources, int tick, List<Map<String, Object>> events) {
         List<List<Map<String, Object>>> grid = (List<List<Map<String, Object>>>) state.get("grid");
-        List<Map<String, Object>> hand = (List<Map<String, Object>>) state.get("hand");
         Map<String, Map<String, Object>> configMap = configMap();
         for (List<Map<String, Object>> row : grid) {
             for (Map<String, Object> cell : row) {
                 Map<String, Object> entity = (Map<String, Object>) cell.get("entity");
                 if (entity == null || !"building".equals(str(entity.get("kind"))) || !"player".equals(str(entity.get("owner")))) continue;
                 String code = str(entity.get("code"));
+                if ("belt".equals(code)) continue;
+                initPorts(entity, (int) num(cell.get("col")), (int) num(cell.get("row")));
                 int interval = buildingInterval(code);
                 if (interval <= 0) continue;
                 entity.put("progress", Math.min(10, num(entity.get("progress")) + Math.max(1, 10 / interval)));
@@ -454,7 +486,7 @@ public class GameAppService {
                     entity.put("status", "生产中");
                     continue;
                 }
-                if (produceByBuilding(code, resources, hand, configMap, events)) {
+                if (produceByBuilding(grid, entity, code, resources, configMap, events)) {
                     entity.put("progress", 0);
                     entity.put("status", "生产中");
                 } else {
@@ -464,44 +496,82 @@ public class GameAppService {
         }
     }
 
-    private boolean produceByBuilding(String code, Map<String, Object> resources, List<Map<String, Object>> hand,
+    @SuppressWarnings("unchecked")
+    private boolean produceByBuilding(List<List<Map<String, Object>>> grid, Map<String, Object> building, String code, Map<String, Object> resources,
                                       Map<String, Map<String, Object>> configMap, List<Map<String, Object>> events) {
+        Map<String, Object> ports = (Map<String, Object>) building.get("ports");
+        List<Map<String, Object>> inputs = (List<Map<String, Object>>) ports.get("inputs");
+        List<Map<String, Object>> outputs = (List<Map<String, Object>>) ports.get("outputs");
         if ("maternityRoom".equals(code)) {
-            if (num(resources.get("food")) < 1 || !hasHandRoom(hand, "baby")) return false;
+            if (countAt(grid, inputs.get(0), "villager") < 2 || num(resources.get("food")) < 1 || !canOutput(grid, outputs.get(0), "baby")) return false;
             resources.put("food", num(resources.get("food")) - 1);
-            addStack(hand, "baby", 1, configMap);
-            events.add(Map.of("text", "产房消耗 1 粮食，产出婴儿"));
+            outputTo(grid, outputs.get(0), "baby", configMap);
+            events.add(Map.of("text", "产房按投料口村民生产婴儿"));
             return true;
         }
         if ("nursery".equals(code)) {
-            if (num(resources.get("food")) < 1 || !consumeHand(hand, "baby", 1) || !hasHandRoom(hand, "villager")) return false;
-            resources.put("food", num(resources.get("food")) - 1);
-            addStack(hand, "villager", 1, configMap);
+            if (num(resources.get("food")) < 2 || !canOutput(grid, outputs.get(0), "villager")) return false;
+            if (!consumeAt(grid, inputs.get(0), "baby", 1)) return false;
+            resources.put("food", num(resources.get("food")) - 2);
+            outputTo(grid, outputs.get(0), "villager", configMap);
             events.add(Map.of("text", "育婴室消耗婴儿和粮食，产出村民"));
             return true;
         }
         String equipment = workshopOutput(code);
         if (equipment != null) {
-            if (num(resources.get("ore")) < 1 || !hasHandRoom(hand, equipment)) return false;
-            resources.put("ore", num(resources.get("ore")) - 1);
-            addStack(hand, equipment, 1, configMap);
-            events.add(Map.of("text", "工坊消耗 1 矿石，产出" + configMap.get(equipment).get("name")));
+            if (!canOutput(grid, outputs.get(0), equipment)) return false;
+            if (!consumeAt(grid, inputs.get(0), "ore", 1)) {
+                if (num(resources.get("ore")) < 1) return false;
+                resources.put("ore", num(resources.get("ore")) - 1);
+            }
+            outputTo(grid, outputs.get(0), equipment, configMap);
+            events.add(Map.of("text", "工坊消耗矿石，产出" + configMap.get(equipment).get("name")));
             return true;
         }
         if ("trainingCamp".equals(code)) {
-            String[] equipments = {"pickaxe", "sword", "bow", "staff", "shield", "spear"};
-            for (String equipmentCode : equipments) {
+            for (int inputIndex = 1; inputIndex <= 3 && inputIndex < inputs.size(); inputIndex++) {
+                Map<String, Object> equipmentEntity = entityAt(grid, inputs.get(inputIndex));
+                if (equipmentEntity == null) continue;
+                String equipmentCode = str(equipmentEntity.get("code"));
                 String unitCode = trainingOutput(equipmentCode);
-                if (handCount(hand, "villager") >= 1 && handCount(hand, equipmentCode) >= 1 && hasHandRoom(hand, unitCode)) {
-                    consumeHand(hand, "villager", 1);
-                    consumeHand(hand, equipmentCode, 1);
-                    addStack(hand, unitCode, 1, configMap);
+                int outputIndex = Math.min(inputIndex - 1, outputs.size() - 1);
+                if (configMap.containsKey(unitCode) && canOutput(grid, outputs.get(outputIndex), unitCode) && consumeAt(grid, inputs.get(0), "villager", 1) && consumeAt(grid, inputs.get(inputIndex), equipmentCode, 1)) {
+                    outputTo(grid, outputs.get(outputIndex), unitCode, configMap);
                     events.add(Map.of("text", "训练营消耗村民和" + configMap.get(equipmentCode).get("name") + "，产出" + configMap.get(unitCode).get("name")));
                     return true;
                 }
             }
         }
         return false;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void runBelts(Map<String, Object> state, int tick, List<Map<String, Object>> events) {
+        if (tick % 2 != 0) return;
+        List<List<Map<String, Object>>> grid = (List<List<Map<String, Object>>>) state.get("grid");
+        Map<String, Map<String, Object>> configMap = configMap();
+        for (List<Map<String, Object>> row : grid) {
+            for (Map<String, Object> cell : row) {
+                Map<String, Object> belt = (Map<String, Object>) cell.get("entity");
+                if (belt == null || !"belt".equals(str(belt.get("code"))) || !"player".equals(str(belt.get("owner")))) continue;
+                initPorts(belt, (int) num(cell.get("col")), (int) num(cell.get("row")));
+                Map<String, Object> ports = (Map<String, Object>) belt.get("ports");
+                List<Map<String, Object>> inputs = (List<Map<String, Object>>) ports.get("inputs");
+                List<Map<String, Object>> outputs = (List<Map<String, Object>>) ports.get("outputs");
+                for (int i = 0; i < inputs.size(); i++) {
+                    Map<String, Object> source = entityAt(grid, inputs.get(i));
+                    if (source == null || !canBeltMove(source)) continue;
+                    String code = str(source.get("code"));
+                    Map<String, Object> output = outputs.get(i);
+                    if ((int) num(output.get("row")) == 4 && !"unit".equals(str(source.get("kind")))) continue;
+                    if (!canOutput(grid, output, code)) continue;
+                    consumeAt(grid, inputs.get(i), code, 1);
+                    outputTo(grid, output, code, configMap);
+                    events.add(Map.of("text", "传送带搬运 " + source.get("label")));
+                    break;
+                }
+            }
+        }
     }
 
     private int buildingInterval(String code) {
@@ -537,23 +607,6 @@ public class GameAppService {
         };
     }
 
-    private boolean hasHandRoom(List<Map<String, Object>> hand, String code) {
-        return hand.stream().anyMatch(item -> code.equals(item.get("code"))) || hand.size() < 9;
-    }
-
-    private boolean consumeHand(List<Map<String, Object>> hand, String code, int count) {
-        for (Map<String, Object> stack : hand) {
-            if (!code.equals(stack.get("code")) || num(stack.get("count")) < count) continue;
-            long remain = num(stack.get("count")) - count;
-            if (remain <= 0) hand.remove(stack); else stack.put("count", remain);
-            return true;
-        }
-        return false;
-    }
-
-    private long handCount(List<Map<String, Object>> hand, String code) {
-        return hand.stream().filter(item -> code.equals(item.get("code"))).mapToLong(item -> num(item.get("count"))).sum();
-    }
 
     private void saveSnapshot(long battleId, Map<String, Object> state, List<Map<String, Object>> commands, List<Map<String, Object>> events) {
         String stateJson = json(state);
@@ -598,7 +651,7 @@ public class GameAppService {
     private boolean canStack(Map<String, Object> entity, String code) {
         if (!code.equals(str(entity.get("code")))) return false;
         String kind = str(entity.get("kind"));
-        return ("unit".equals(kind) || "building".equals(kind)) && num(entity.get("count")) < 9;
+        return ("unit".equals(kind) || "building".equals(kind) || "material".equals(kind) || "equipment".equals(kind)) && num(entity.get("count")) < 99;
     }
 
     private boolean isCollector(String code) {
@@ -632,6 +685,108 @@ public class GameAppService {
         map.put("progress", 0);
         map.put("status", "");
         return map;
+    }
+
+    private void initPorts(Map<String, Object> entity, int col, int row) {
+        if (entity.containsKey("ports") || !"building".equals(str(entity.get("kind")))) return;
+        String code = str(entity.get("code"));
+        int inputCount = "belt".equals(code) ? 5 : "trainingCamp".equals(code) ? 4 : 1;
+        int outputCount = "belt".equals(code) ? 5 : "trainingCamp".equals(code) ? 3 : 1;
+        List<Map<String, Object>> inputs = new ArrayList<>();
+        List<Map<String, Object>> outputs = new ArrayList<>();
+        for (int i = 0; i < inputCount; i++) {
+            inputs.add(port(Math.max(0, col - 1), Math.max(4, row - Math.min(i, 1)), inputName(code, i)));
+        }
+        for (int i = 0; i < outputCount; i++) {
+            outputs.add(port(Math.min(GRID_COLS - 1, col + 1), Math.min(11, row + Math.min(i, 1)), outputName(code, i)));
+        }
+        Map<String, Object> ports = new LinkedHashMap<>();
+        ports.put("inputs", inputs);
+        ports.put("outputs", outputs);
+        entity.put("ports", ports);
+    }
+
+    private Map<String, Object> port(int col, int row, String accepts) {
+        Map<String, Object> port = new LinkedHashMap<>();
+        port.put("col", col);
+        port.put("row", row);
+        port.put("accepts", accepts);
+        return port;
+    }
+
+    private String inputName(String code, int index) {
+        if ("maternityRoom".equals(code)) return "villager";
+        if ("nursery".equals(code)) return "baby";
+        if ("trainingCamp".equals(code)) return index == 0 ? "villager" : "equipment";
+        if ("belt".equals(code)) return "movable";
+        return "ore";
+    }
+
+    private String outputName(String code, int index) {
+        if ("maternityRoom".equals(code)) return "baby";
+        if ("nursery".equals(code)) return "villager";
+        if ("trainingCamp".equals(code)) return "unit";
+        if ("belt".equals(code)) return "movable";
+        return workshopOutput(code);
+    }
+
+    private Map<String, Object> entityAt(List<List<Map<String, Object>>> grid, Map<String, Object> port) {
+        int col = (int) num(port.get("col"));
+        int row = (int) num(port.get("row"));
+        if (row < 0 || row >= grid.size() || col < 0 || col >= GRID_COLS) return null;
+        return castEntity(grid.get(row).get(col).get("entity"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> castEntity(Object value) {
+        return value instanceof Map ? (Map<String, Object>) value : null;
+    }
+
+    private long countAt(List<List<Map<String, Object>>> grid, Map<String, Object> port, String code) {
+        Map<String, Object> entity = entityAt(grid, port);
+        if (entity == null || !code.equals(str(entity.get("code")))) return 0;
+        return num(entity.get("count"));
+    }
+
+    private boolean consumeAt(List<List<Map<String, Object>>> grid, Map<String, Object> port, String code, int count) {
+        int col = (int) num(port.get("col"));
+        int row = (int) num(port.get("row"));
+        if (row < 0 || row >= grid.size() || col < 0 || col >= GRID_COLS) return false;
+        Map<String, Object> cell = grid.get(row).get(col);
+        Map<String, Object> entity = castEntity(cell.get("entity"));
+        if (entity == null || !code.equals(str(entity.get("code"))) || num(entity.get("count")) < count) return false;
+        long remain = num(entity.get("count")) - count;
+        if (remain <= 0) cell.remove("entity"); else entity.put("count", remain);
+        return true;
+    }
+
+    private boolean canOutput(List<List<Map<String, Object>>> grid, Map<String, Object> port, String code) {
+        if (StrUtil.isBlank(code)) return false;
+        int col = (int) num(port.get("col"));
+        int row = (int) num(port.get("row"));
+        if (!isOperableCell(col, row)) return false;
+        Map<String, Object> target = castEntity(grid.get(row).get(col).get("entity"));
+        return target == null || canStack(target, code);
+    }
+
+    private void outputTo(List<List<Map<String, Object>>> grid, Map<String, Object> port, String code, Map<String, Map<String, Object>> configMap) {
+        int col = (int) num(port.get("col"));
+        int row = (int) num(port.get("row"));
+        Map<String, Object> cell = grid.get(row).get(col);
+        Map<String, Object> target = castEntity(cell.get("entity"));
+        Map<String, Object> def = configMap.get(code);
+        if (target != null && canStack(target, code)) {
+            target.put("count", num(target.get("count")) + 1);
+            target.put("hp", num(target.get("hp")) + num(def.get("hp")));
+            target.put("maxHp", num(target.get("maxHp")) + num(def.get("hp")));
+            return;
+        }
+        cell.put("entity", entity(random(), code, str(def.get("name")), str(def.get("type")), "player", str(def.get("asset_key")), 1, (int) num(def.get("hp")), (int) num(def.get("attack"))));
+    }
+
+    private boolean canBeltMove(Map<String, Object> entity) {
+        String kind = str(entity.get("kind"));
+        return "unit".equals(kind) || "material".equals(kind) || "equipment".equals(kind);
     }
 
     private void addStack(List<Map<String, Object>> hand, String code, int count, Map<String, Map<String, Object>> configMap) {
