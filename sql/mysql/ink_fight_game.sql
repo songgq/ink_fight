@@ -141,7 +141,15 @@ INSERT INTO game_card_config(code, name, type, asset_key, growable, max_level, s
 ('spearWorkshop','长枪工坊','building','spearWorkshop',1,11,9,1,36,0,0,200),
 ('ironMine','铁矿','resource','ironMine',1,11,9,1,80,0,0,210),
 ('goldMine','金矿','resource','goldMine',1,11,9,1,80,0,0,220),
-('forest','果树','resource','forest',1,11,9,1,80,0,0,230)
+('forest','果树','resource','forest',1,11,9,1,80,0,0,230),
+('baby','婴儿','material','baby',0,1,99,1,1,0,0,310),
+('ore','矿石','material','pickaxe',0,1,99,1,1,0,0,320),
+('pickaxe','镐子','equipment','pickaxe',0,1,99,1,1,0,0,330),
+('sword','长剑','equipment','sword',0,1,99,1,1,0,0,340),
+('bow','弓箭','equipment','bow',0,1,99,1,1,0,0,350),
+('staff','法杖','equipment','staff',0,1,99,1,1,0,0,360),
+('shield','护盾','equipment','shield',0,1,99,1,1,0,0,370),
+('spear','长枪','equipment','spear',0,1,99,1,1,0,0,380)
 ON DUPLICATE KEY UPDATE name=VALUES(name), type=VALUES(type), asset_key=VALUES(asset_key), growable=VALUES(growable), hp=VALUES(hp), attack=VALUES(attack), range_value=VALUES(range_value), sort_order=VALUES(sort_order);
 
 INSERT INTO game_card_upgrade_config(level, need_count, need_gold, gain_exp) VALUES
@@ -157,7 +165,9 @@ INSERT INTO game_pack_pool_config(pack_code, card_code, weight) VALUES
 ('building','maternityRoom',1),('building','nursery',1),('building','trainingCamp',1),('building','belt',1),
 ('building','toolWorkshop',1),('building','swordWorkshop',1),('building','bowWorkshop',1),('building','staffWorkshop',1),('building','shieldWorkshop',1),('building','spearWorkshop',1),
 ('building','ironMine',1),('building','goldMine',1),('building','forest',1),
-('resource','villager',4),('resource','worker',2),('resource','swordsman',2),('resource','archer',2),('resource','mage',1),('resource','shieldman',1),('resource','spearman',2)
+('resource','villager',4),('resource','worker',2),('resource','baby',2),('resource','ore',3),
+('resource','pickaxe',1),('resource','sword',1),('resource','bow',1),('resource','staff',1),('resource','shield',1),('resource','spear',1),
+('resource','swordsman',2),('resource','archer',2),('resource','mage',1),('resource','shieldman',1),('resource','spearman',2)
 ON DUPLICATE KEY UPDATE weight=VALUES(weight);
 
 INSERT INTO game_journey_stage(stage_no, chapter_no, name, reward_gold, enemy_base_hp, config_json) VALUES
