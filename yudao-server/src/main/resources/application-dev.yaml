@@ -152,7 +152,7 @@ wx: # 参见 https://github.com/Wechat-Group/WxJava/blob/develop/spring-boot-sta
   mp:
     # 公众号配置(必填)
     app-id: wx041349c6f39b268b
-    secret: 5abee519483bc9f8cb37ce280e814bd0
+    secret: ${APP_SECRET:}
     # 存储配置，解决 AccessToken 的跨节点的共享
     config-storage:
       type: RedisTemplate # 采用 RedisTemplate 操作 Redis，会自动从 Spring 中获取
@@ -160,7 +160,7 @@ wx: # 参见 https://github.com/Wechat-Group/WxJava/blob/develop/spring-boot-sta
       http-client-type: HttpClient # 采用 HttpClient 请求微信公众号平台
   miniapp: # 小程序配置（必填），参见 https://github.com/Wechat-Group/WxJava/blob/develop/spring-boot-starters/wx-java-miniapp-spring-boot-starter/README.md 文档
     appid: wx63c280fe3248a3e7
-    secret: 6f270509224a7ae1296bbf1c8cb97aed
+    secret: ${APP_SECRET:}
     config-storage:
       type: RedisTemplate # 采用 RedisTemplate 操作 Redis，会自动从 Spring 中获取
       key-prefix: wa # Redis Key 的前缀
@@ -175,33 +175,33 @@ yudao:
     refund-notify-url: http://yunai.natapp1.cc/admin-api/pay/notify/refund # 支付渠道的【退款】回调地址
     transfer-notify-url: https://yunai.natapp1.cc/admin-api/pay/notify/transfer # 支付渠道的【转账】回调地址
   demo: false # 开启演示模式
-  tencent-lbs-key: TVDBZ-TDILD-4ON4B-PFDZA-RNLKH-VVF6E # QQ 地图的密钥 https://lbs.qq.com/service/staticV2/staticGuide/staticDoc
+  tencent-lbs-key: ${TENCENT_LBS_KEY:}
 
 justauth:
   enabled: true
   type:
     DINGTALK: # 钉钉
       client-id: dingvrnreaje3yqvzhxg
-      client-secret: i8E6iZyDvZj51JIb0tYsYfVQYOks9Cq1lgryEjFRqC79P3iJcrxEwT6Qk2QvLrLI
+      client-secret: ${SOCIAL_CLIENT_SECRET:}
       ignore-check-redirect-uri: true
     WECHAT_ENTERPRISE: # 企业微信
       client-id: wwd411c69a39ad2e54
-      client-secret: 1wTb7hYxnpT2TUbIeHGXGo7T0odav1ic10mLdyyATOw
+      client-secret: ${SOCIAL_CLIENT_SECRET:}
       agent-id: 1000004
       ignore-check-redirect-uri: true
     # noinspection SpringBootApplicationYaml
     WECHAT_MINI_PROGRAM: # 微信小程序
       client-id: ${wx.miniapp.appid}
-      client-secret: ${wx.miniapp.secret}
+      client-secret: ${SOCIAL_CLIENT_SECRET:}
       ignore-check-redirect-uri: true
       ignore-check-state: true # 微信小程序，不会使用到 state，所以不进行校验
     WECHAT_MP: # 微信公众号
       client-id: ${wx.mp.app-id}
-      client-secret: ${wx.mp.secret}
+      client-secret: ${SOCIAL_CLIENT_SECRET:}
       ignore-check-redirect-uri: true
     ALIPAY: # 支付宝小程序
       client-id: xx
-      client-secret: xx
+      client-secret: ${SOCIAL_CLIENT_SECRET:}
       alipay-public-key: xx
       ignore-check-redirect-uri: true
       ignore-check-state: true
