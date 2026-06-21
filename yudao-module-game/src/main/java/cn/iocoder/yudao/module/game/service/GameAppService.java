@@ -361,6 +361,10 @@ public class GameAppService {
         int toCol = (int) num(command.get("toCol"));
         int toRow = (int) num(command.get("toRow"));
         if (!isOperableCell(fromCol, fromRow) || !isOperableCell(toCol, toRow)) throw new IllegalArgumentException("只能移动己方生产区或备战区卡牌");
+        if (fromCol == toCol && fromRow == toRow) {
+            events.add(Map.of("text", "卡牌位置未变化"));
+            return;
+        }
         List<List<Map<String, Object>>> grid = (List<List<Map<String, Object>>>) state.get("grid");
         Map<String, Object> from = grid.get(fromRow).get(fromCol);
         Map<String, Object> to = grid.get(toRow).get(toCol);
