@@ -150,7 +150,7 @@ INSERT INTO game_card_config(code, name, type, asset_key, growable, max_level, s
 ('staff','法杖','equipment','staff',0,1,99,1,1,0,0,360),
 ('shield','护盾','equipment','shield',0,1,99,1,1,0,0,370),
 ('spear','长枪','equipment','spear',0,1,99,1,1,0,0,380)
-ON DUPLICATE KEY UPDATE name=VALUES(name), type=VALUES(type), asset_key=VALUES(asset_key), growable=VALUES(growable), hp=VALUES(hp), attack=VALUES(attack), range_value=VALUES(range_value), sort_order=VALUES(sort_order);
+ON DUPLICATE KEY UPDATE name=VALUES(name), type=VALUES(type), asset_key=VALUES(asset_key), growable=VALUES(growable), max_level=VALUES(max_level), stack_limit=VALUES(stack_limit), sell_gold=VALUES(sell_gold), hp=VALUES(hp), attack=VALUES(attack), range_value=VALUES(range_value), sort_order=VALUES(sort_order);
 
 INSERT INTO game_card_upgrade_config(level, need_count, need_gold, gain_exp) VALUES
 (1,2,20,5),(2,4,50,8),(3,10,120,12),(4,20,300,18),(5,50,700,25),(6,100,1500,35),(7,200,3000,50),(8,400,6000,70),(9,800,12000,100),(10,1000,20000,150)

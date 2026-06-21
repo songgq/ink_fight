@@ -81,4 +81,10 @@ public class GameAppController {
                                                     @PathVariable String battleNo) {
         return success(gameAppService.settle(authorization, battleNo));
     }
+
+    @PostMapping("/battles/{battleNo}/surrender")
+    public CommonResult<Map<String, Object>> surrender(@RequestHeader(value = "Authorization", required = false) String authorization,
+                                                       @PathVariable String battleNo) {
+        return success(gameAppService.surrender(authorization, battleNo));
+    }
 }
